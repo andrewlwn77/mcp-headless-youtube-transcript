@@ -1,0 +1,40 @@
+{
+  "name": "mcp-headless-youtube-transcript",
+  "version": "0.1.0",
+  "description": "MCP server for extracting YouTube video transcripts using headless-youtube-captions",
+  "main": "build/index.js",
+  "bin": {
+    "mcp-headless-youtube-transcript": "build/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node build/index.js",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "keywords": [
+    "mcp",
+    "server",
+    "youtube",
+    "transcript",
+    "captions"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "headless-youtube-captions": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0",
+    "@vitest/ui": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
