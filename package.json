@@ -12,7 +12,8 @@
     "dev": "tsx src/index.ts",
     "start": "node build/index.js",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "prepublishOnly": "npm run build && npm run test:run"
   },
   "keywords": [
     "mcp",
@@ -21,11 +22,19 @@
     "transcript",
     "captions"
   ],
-  "author": "",
+  "author": "Andrew Lewin",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrewlwn77/mcp-headless-youtube-transcript.git"
+  },
+  "bugs": {
+    "url": "https://github.com/andrewlwn77/mcp-headless-youtube-transcript/issues"
+  },
+  "homepage": "https://github.com/andrewlwn77/mcp-headless-youtube-transcript#readme",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "headless-youtube-captions": "^1.0.0"
+    "headless-youtube-captions": "^1.0.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
