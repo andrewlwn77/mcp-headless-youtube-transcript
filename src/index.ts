@@ -40,6 +40,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Language code for captions (e.g., "en", "es", "ko"). Defaults to "en"',
               default: 'en',
             },
+            segment: {
+              type: 'number',
+              description: 'Segment number to retrieve (1-based). Each segment is ~98k characters. Defaults to 1',
+              default: 1,
+            },
           },
           required: ['videoId'],
         },
@@ -54,9 +59,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'get_youtube_transcript') {
     try {
-      const { videoId, lang = 'en' } = args as {
+      const { videoId, lang = 'en', segment = 1 } = args as {
         videoId: string;
         lang?: string;
+        segment?: number;
       };
 
       // Extract video ID from URL if a full URL is provided
@@ -72,14 +78,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         lang: lang,
       });
 
-      // Just get the raw text content, no timestamps
-      const transcript = subtitles.map(s => s.text).join(' ');
+      // Get the full raw text content
+      const fullTranscript = subtitles.map(s => s.text).join(' ');
+      
+      // Split into 98k character chunks
+      const chunkSize = 98000;
+      const chunks: string[] = [];
+      
+      for (let i = 0; i < fullTranscript.length; i += chunkSize) {
+        chunks.push(fullTranscript.substring(i, i + chunkSize));
+      }
+      
+      // Validate segment number
+      if (segment < 1 || segment > chunks.length) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: Invalid segment ${segment}. Available segments: 1-${chunks.length}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+      
+      // Get the requested segment (convert to 0-based index)
+      const requestedChunk = chunks[segment - 1];
+      
+      // Add metadata about segmentation
+      const segmentInfo = chunks.length > 1 
+        ? `[Segment ${segment} of ${chunks.length}]\n\n`
+        : '';
 
       return {
         content: [
           {
             type: 'text',
-            text: transcript,
+            text: segmentInfo + requestedChunk,
           },
         ],
       };
