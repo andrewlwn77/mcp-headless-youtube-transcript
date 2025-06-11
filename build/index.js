@@ -4,6 +4,41 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema, } from '@modelcontextprotocol/sdk/types.js';
 import { getSubtitles } from 'headless-youtube-captions';
 import { extractVideoId } from './utils.js';
+// In-memory cache
+const transcriptCache = new Map();
+// Get cache TTL from environment variable (default 5 minutes)
+const CACHE_TTL_SECONDS = parseInt(process.env.TRANSCRIPT_CACHE_TTL || '300');
+// Cache helper functions
+function getCacheKey(videoId, lang) {
+    return `${videoId}:${lang}`;
+}
+function getCachedTranscript(videoId, lang) {
+    const key = getCacheKey(videoId, lang);
+    const entry = transcriptCache.get(key);
+    if (!entry)
+        return null;
+    const now = Date.now();
+    if (now > entry.expiresAt) {
+        transcriptCache.delete(key);
+        return null;
+    }
+    // Update expiration time on read
+    entry.expiresAt = now + (CACHE_TTL_SECONDS * 1000);
+    return entry.transcript;
+}
+function setCachedTranscript(videoId, lang, transcript) {
+    const key = getCacheKey(videoId, lang);
+    const expiresAt = Date.now() + (CACHE_TTL_SECONDS * 1000);
+    transcriptCache.set(key, { transcript, expiresAt });
+}
+function cleanupExpiredCache() {
+    const now = Date.now();
+    for (const [key, entry] of transcriptCache.entries()) {
+        if (now > entry.expiresAt) {
+            transcriptCache.delete(key);
+        }
+    }
+}
 const server = new Server({
     name: 'mcp-headless-youtube-transcript',
     version: '1.0.0',
@@ -54,13 +89,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             if (!extractedVideoId) {
                 throw new Error('Invalid YouTube video ID or URL');
             }
-            // Get subtitles using headless-youtube-captions
-            const subtitles = await getSubtitles({
-                videoID: extractedVideoId,
-                lang: lang,
-            });
-            // Get the full raw text content
-            const fullTranscript = subtitles.map(s => s.text).join(' ');
+            // Check cache first
+            let fullTranscript = getCachedTranscript(extractedVideoId, lang);
+            if (!fullTranscript) {
+                // Get subtitles using headless-youtube-captions
+                const subtitles = await getSubtitles({
+                    videoID: extractedVideoId,
+                    lang: lang,
+                });
+                // Get the full raw text content
+                fullTranscript = subtitles.map(s => s.text).join(' ');
+                // Cache the full transcript
+                setCachedTranscript(extractedVideoId, lang, fullTranscript);
+            }
             // Split into 98k character chunks
             const chunkSize = 98000;
             const chunks = [];
@@ -105,6 +146,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 ],
                 isError: true,
             };
+        }
+        finally {
+            // Cleanup expired cache entries after each request
+            cleanupExpiredCache();
         }
     }
     throw new Error(`Unknown tool: ${name}`);

@@ -9,6 +9,55 @@ import {
 import { getSubtitles, Subtitle } from 'headless-youtube-captions';
 import { extractVideoId, formatTime } from './utils.js';
 
+// Cache interface
+interface CacheEntry {
+  transcript: string;
+  expiresAt: number;
+}
+
+// In-memory cache
+const transcriptCache = new Map<string, CacheEntry>();
+
+// Get cache TTL from environment variable (default 5 minutes)
+const CACHE_TTL_SECONDS = parseInt(process.env.TRANSCRIPT_CACHE_TTL || '300');
+
+// Cache helper functions
+function getCacheKey(videoId: string, lang: string): string {
+  return `${videoId}:${lang}`;
+}
+
+function getCachedTranscript(videoId: string, lang: string): string | null {
+  const key = getCacheKey(videoId, lang);
+  const entry = transcriptCache.get(key);
+  
+  if (!entry) return null;
+  
+  const now = Date.now();
+  if (now > entry.expiresAt) {
+    transcriptCache.delete(key);
+    return null;
+  }
+  
+  // Update expiration time on read
+  entry.expiresAt = now + (CACHE_TTL_SECONDS * 1000);
+  return entry.transcript;
+}
+
+function setCachedTranscript(videoId: string, lang: string, transcript: string): void {
+  const key = getCacheKey(videoId, lang);
+  const expiresAt = Date.now() + (CACHE_TTL_SECONDS * 1000);
+  transcriptCache.set(key, { transcript, expiresAt });
+}
+
+function cleanupExpiredCache(): void {
+  const now = Date.now();
+  for (const [key, entry] of transcriptCache.entries()) {
+    if (now > entry.expiresAt) {
+      transcriptCache.delete(key);
+    }
+  }
+}
+
 const server = new Server(
   {
     name: 'mcp-headless-youtube-transcript',
@@ -72,14 +121,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error('Invalid YouTube video ID or URL');
       }
 
-      // Get subtitles using headless-youtube-captions
-      const subtitles = await getSubtitles({
-        videoID: extractedVideoId,
-        lang: lang,
-      });
+      // Check cache first
+      let fullTranscript = getCachedTranscript(extractedVideoId, lang);
+      
+      if (!fullTranscript) {
+        // Get subtitles using headless-youtube-captions
+        const subtitles = await getSubtitles({
+          videoID: extractedVideoId,
+          lang: lang,
+        });
 
-      // Get the full raw text content
-      const fullTranscript = subtitles.map(s => s.text).join(' ');
+        // Get the full raw text content
+        fullTranscript = subtitles.map(s => s.text).join(' ');
+        
+        // Cache the full transcript
+        setCachedTranscript(extractedVideoId, lang, fullTranscript);
+      }
       
       // Split into 98k character chunks
       const chunkSize = 98000;
@@ -130,6 +187,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ],
         isError: true,
       };
+    } finally {
+      // Cleanup expired cache entries after each request
+      cleanupExpiredCache();
     }
   }
 

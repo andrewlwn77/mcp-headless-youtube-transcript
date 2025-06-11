@@ -96,6 +96,25 @@ this is the actual transcript text content...
 
 When multiple segments are available, you can retrieve subsequent segments by incrementing the `segment` parameter.
 
+## Caching
+
+The server includes built-in caching to improve performance for paginated requests. The cache behavior can be configured with an environment variable:
+
+- `TRANSCRIPT_CACHE_TTL`: Cache duration in seconds (default: 300 = 5 minutes)
+
+### Cache Features:
+- Full transcripts are cached on first fetch
+- Cache expiration time is updated on each read or write
+- Expired entries are automatically cleaned up after each request
+- Each video+language combination is cached separately
+
+### Setting Cache Duration:
+
+```bash
+# Set cache to 10 minutes
+TRANSCRIPT_CACHE_TTL=600 npx mcp-headless-youtube-transcript
+```
+
 ## Supported URL Formats
 
 - Video ID: `dQw4w9WgXcQ`
