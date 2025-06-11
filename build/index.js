@@ -3,7 +3,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, } from '@modelcontextprotocol/sdk/types.js';
 import { getSubtitles } from 'headless-youtube-captions';
-import { extractVideoId, formatTime } from './utils.js';
+import { extractVideoId } from './utils.js';
 const server = new Server({
     name: 'mcp-headless-youtube-transcript',
     version: '1.0.0',
@@ -54,15 +54,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 videoID: extractedVideoId,
                 lang: lang,
             });
-            // Format the transcript
-            const transcript = subtitles
-                .map((subtitle) => `[${formatTime(subtitle.start)}] ${subtitle.text}`)
-                .join('\n');
+            // Just get the raw text content, no timestamps
+            const transcript = subtitles.map(s => s.text).join(' ');
             return {
                 content: [
                     {
                         type: 'text',
-                        text: `YouTube Transcript for video ID: ${extractedVideoId}\nLanguage: ${lang}\n\n${transcript}`,
+                        text: transcript,
                     },
                 ],
             };

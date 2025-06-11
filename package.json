@@ -1,6 +1,6 @@
 {
   "name": "mcp-headless-youtube-transcript",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "MCP server for extracting YouTube video transcripts using headless-youtube-captions",
   "main": "build/index.js",
   "bin": {

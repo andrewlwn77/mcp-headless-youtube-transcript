@@ -72,16 +72,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         lang: lang,
       });
 
-      // Format the transcript
-      const transcript = subtitles
-        .map((subtitle: Subtitle) => `[${formatTime(subtitle.start)}] ${subtitle.text}`)
-        .join('\n');
+      // Just get the raw text content, no timestamps
+      const transcript = subtitles.map(s => s.text).join(' ');
 
       return {
         content: [
           {
             type: 'text',
-            text: `YouTube Transcript for video ID: ${extractedVideoId}\nLanguage: ${lang}\n\n${transcript}`,
+            text: transcript,
           },
         ],
       };
