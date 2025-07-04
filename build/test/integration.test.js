@@ -17,7 +17,7 @@ async function getYouTubeTranscript(videoId, lang = 'en') {
         lang: lang,
     });
     const transcript = subtitles
-        .map((subtitle) => `[${formatTime(subtitle.start)}] ${subtitle.text}`)
+        .map((subtitle) => `[${formatTime(parseFloat(subtitle.start))}] ${subtitle.text}`)
         .join('\n');
     return {
         videoId: extractedVideoId,
@@ -31,11 +31,11 @@ describe('Integration Tests', () => {
     });
     describe('getYouTubeTranscript', () => {
         const mockSubtitles = [
-            { start: 0, dur: 2, text: 'Hello world' },
-            { start: 2, dur: 3, text: 'This is a test' },
-            { start: 5, dur: 2, text: 'YouTube transcript' },
-            { start: 65, dur: 1, text: 'One minute mark' },
-            { start: 125, dur: 2, text: 'Two minutes five seconds' },
+            { start: '0', dur: '2', text: 'Hello world' },
+            { start: '2', dur: '3', text: 'This is a test' },
+            { start: '5', dur: '2', text: 'YouTube transcript' },
+            { start: '65', dur: '1', text: 'One minute mark' },
+            { start: '125', dur: '2', text: 'Two minutes five seconds' },
         ];
         it('should successfully get transcript with video ID', async () => {
             mockGetSubtitles.mockResolvedValue(mockSubtitles);
@@ -119,8 +119,8 @@ describe('Integration Tests', () => {
     describe('End-to-end workflow', () => {
         it('should handle typical YouTube URL with various query parameters', async () => {
             const mockSubtitles = [
-                { start: 30, dur: 5, text: 'Welcome to our tutorial' },
-                { start: 35, dur: 4, text: 'Today we will learn about' },
+                { start: '30', dur: '5', text: 'Welcome to our tutorial' },
+                { start: '35', dur: '4', text: 'Today we will learn about' },
             ];
             mockGetSubtitles.mockResolvedValue(mockSubtitles);
             const urlsToTest = [
@@ -137,8 +137,8 @@ describe('Integration Tests', () => {
         });
         it('should work with different languages', async () => {
             const mockSubtitles = [
-                { start: 0, dur: 3, text: 'Hola mundo' },
-                { start: 3, dur: 4, text: 'Esto es una prueba' },
+                { start: '0', dur: '3', text: 'Hola mundo' },
+                { start: '3', dur: '4', text: 'Esto es una prueba' },
             ];
             mockGetSubtitles.mockResolvedValue(mockSubtitles);
             const result = await getYouTubeTranscript('dQw4w9WgXcQ', 'es');

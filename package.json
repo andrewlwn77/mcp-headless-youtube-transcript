@@ -1,6 +1,6 @@
 {
   "name": "mcp-headless-youtube-transcript",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MCP server for extracting YouTube video transcripts using headless-youtube-captions",
   "main": "build/index.js",
   "bin": {
@@ -34,7 +34,7 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "headless-youtube-captions": "^1.0.2"
+    "headless-youtube-captions": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -18,11 +18,11 @@ describe.skip('Manual API Tests (requires internet)', () => {
                 // Check that subtitles have the expected structure
                 expect(subtitles[0]).toHaveProperty('start');
                 expect(subtitles[0]).toHaveProperty('text');
-                expect(typeof subtitles[0].start).toBe('number');
+                expect(typeof subtitles[0].start).toBe('string');
                 expect(typeof subtitles[0].text).toBe('string');
                 // Test formatting
                 const transcript = subtitles
-                    .map((subtitle) => `[${formatTime(subtitle.start)}] ${subtitle.text}`)
+                    .map((subtitle) => `[${formatTime(parseFloat(subtitle.start))}] ${subtitle.text}`)
                     .join('\n');
                 expect(transcript.length).toBeGreaterThan(0);
                 expect(transcript).toContain('[');

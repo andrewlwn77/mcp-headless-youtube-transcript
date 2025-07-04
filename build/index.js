@@ -2,8 +2,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, } from '@modelcontextprotocol/sdk/types.js';
-import { getSubtitles } from 'headless-youtube-captions';
-import { extractVideoId } from './utils.js';
+// @ts-ignore - Types are defined in global.d.ts
+import { getSubtitles, getChannelVideos, searchChannelVideos, getVideoComments } from 'headless-youtube-captions';
+import { extractVideoId, extractChannelIdentifier, formatChannelUrl, truncateText } from './utils.js';
 // In-memory cache
 const transcriptCache = new Map();
 // Get cache TTL from environment variable (default 5 minutes)
@@ -70,6 +71,68 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                             type: 'number',
                             description: 'Segment number to retrieve (1-based). Each segment is ~98k characters. Defaults to 1',
                             default: 1,
+                        },
+                    },
+                    required: ['videoId'],
+                },
+            },
+            {
+                name: 'get_channel_videos',
+                description: 'Extract videos from a YouTube channel with pagination support',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        channelUrl: {
+                            type: 'string',
+                            description: 'YouTube channel URL, @handle, or channel ID',
+                        },
+                        maxVideos: {
+                            type: 'number',
+                            description: 'Maximum number of videos to retrieve. Defaults to 50',
+                            default: 50,
+                        },
+                    },
+                    required: ['channelUrl'],
+                },
+            },
+            {
+                name: 'search_channel_videos',
+                description: 'Search for specific videos within a YouTube channel',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        channelUrl: {
+                            type: 'string',
+                            description: 'YouTube channel URL, @handle, or channel ID',
+                        },
+                        query: {
+                            type: 'string',
+                            description: 'Search query to find videos in the channel',
+                        },
+                    },
+                    required: ['channelUrl', 'query'],
+                },
+            },
+            {
+                name: 'get_video_comments',
+                description: 'Retrieve comments from a YouTube video',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        videoId: {
+                            type: 'string',
+                            description: 'YouTube video ID or full URL',
+                        },
+                        sortBy: {
+                            type: 'string',
+                            description: 'Sort comments by "top" or "newest". Defaults to "top"',
+                            enum: ['top', 'newest'],
+                            default: 'top',
+                        },
+                        maxComments: {
+                            type: 'number',
+                            description: 'Maximum number of comments to retrieve. Defaults to 100',
+                            default: 100,
                         },
                     },
                     required: ['videoId'],
@@ -150,6 +213,164 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         finally {
             // Cleanup expired cache entries after each request
             cleanupExpiredCache();
+        }
+    }
+    if (name === 'get_channel_videos') {
+        try {
+            const { channelUrl, maxVideos = 50 } = args;
+            // Extract and format channel URL
+            const channelIdentifier = extractChannelIdentifier(channelUrl);
+            const formattedUrl = formatChannelUrl(channelIdentifier);
+            // Get channel videos
+            const result = await getChannelVideos({
+                channelURL: formattedUrl,
+                limit: maxVideos
+            });
+            // Format the response
+            const response = {
+                channel: {
+                    name: result.channel.name,
+                    subscribers: result.channel.subscribers,
+                    videoCount: result.channel.videoCount,
+                },
+                videos: result.videos.map((video) => ({
+                    id: video.id,
+                    title: video.title,
+                    url: video.url,
+                    views: video.views,
+                    uploadTime: video.uploadTime,
+                    duration: video.duration,
+                    thumbnail: video.thumbnail,
+                })),
+                totalVideosRetrieved: result.totalLoaded,
+                hasMore: result.hasMore,
+            };
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify(response, null, 2),
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Error getting channel videos: ${errorMessage}`,
+                    },
+                ],
+                isError: true,
+            };
+        }
+    }
+    if (name === 'search_channel_videos') {
+        try {
+            const { channelUrl, query } = args;
+            // Extract and format channel URL
+            const channelIdentifier = extractChannelIdentifier(channelUrl);
+            const formattedUrl = formatChannelUrl(channelIdentifier);
+            // Search channel videos
+            const result = await searchChannelVideos({
+                channelURL: formattedUrl,
+                query: query
+            });
+            // Format the response
+            const response = {
+                query: result.query,
+                channelUrl: formattedUrl,
+                results: result.results.map((video) => ({
+                    id: video.id,
+                    title: video.title,
+                    url: video.url,
+                    views: video.views,
+                    uploadTime: video.uploadTime,
+                    duration: video.duration,
+                    thumbnail: video.thumbnail,
+                })),
+                totalResults: result.totalFound,
+            };
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify(response, null, 2),
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Error searching channel videos: ${errorMessage}`,
+                    },
+                ],
+                isError: true,
+            };
+        }
+    }
+    if (name === 'get_video_comments') {
+        try {
+            const { videoId, sortBy = 'top', maxComments = 100 } = args;
+            // Extract video ID from URL if needed
+            const extractedVideoId = extractVideoId(videoId);
+            if (!extractedVideoId) {
+                throw new Error('Invalid YouTube video ID or URL');
+            }
+            // Get video comments
+            const result = await getVideoComments({
+                videoID: extractedVideoId,
+                sortBy: sortBy,
+                limit: maxComments
+            });
+            // Format the response (truncate if needed)
+            const response = {
+                video: {
+                    id: result.video.id,
+                    title: result.video.title,
+                    channel: result.video.channel,
+                    views: result.video.views,
+                },
+                sortBy: result.sortBy,
+                comments: result.comments.map((comment) => ({
+                    author: comment.author,
+                    text: comment.text,
+                    likes: comment.likes,
+                    replyCount: comment.replyCount,
+                    time: comment.time,
+                })),
+                totalComments: result.totalComments,
+                totalLoaded: result.totalLoaded,
+                hasMore: result.hasMore,
+            };
+            const responseText = JSON.stringify(response, null, 2);
+            const truncatedResponse = truncateText(responseText);
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: truncatedResponse,
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Error getting video comments: ${errorMessage}`,
+                    },
+                ],
+                isError: true,
+            };
         }
     }
     throw new Error(`Unknown tool: ${name}`);

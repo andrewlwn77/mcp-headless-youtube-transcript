@@ -1,10 +1,13 @@
 # MCP Headless YouTube Transcript
 
-An MCP (Model Context Protocol) server that extracts YouTube video transcripts using the `headless-youtube-captions` library.
+An MCP (Model Context Protocol) server that extracts YouTube video transcripts, channel videos, and comments using the `headless-youtube-captions` library.
 
 ## Features
 
 - Extract transcripts from YouTube videos using video ID or full URL
+- Get videos from YouTube channels with pagination support
+- Search for videos within a specific channel
+- Retrieve comments from YouTube videos
 - Support for multiple languages
 - Automatic pagination for large transcripts (98k character chunks)
 - Clean text output optimized for LLM consumption
@@ -84,9 +87,93 @@ With pagination:
 }
 ```
 
-## Response Format
+### `get_channel_videos`
 
-The tool returns the raw transcript text. For large transcripts, the response includes pagination information:
+Extract videos from a YouTube channel with pagination support.
+
+**Parameters:**
+- `channelUrl` (required): YouTube channel URL, @handle, or channel ID
+- `maxVideos` (optional): Maximum number of videos to retrieve. Defaults to 50
+
+**Examples:**
+
+Using handle:
+```json
+{
+  "name": "get_channel_videos",
+  "arguments": {
+    "channelUrl": "@mkbhd"
+  }
+}
+```
+
+Using channel URL:
+```json
+{
+  "name": "get_channel_videos",
+  "arguments": {
+    "channelUrl": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+    "maxVideos": 100
+  }
+}
+```
+
+### `search_channel_videos`
+
+Search for specific videos within a YouTube channel.
+
+**Parameters:**
+- `channelUrl` (required): YouTube channel URL, @handle, or channel ID
+- `query` (required): Search query to find videos in the channel
+
+**Example:**
+```json
+{
+  "name": "search_channel_videos",
+  "arguments": {
+    "channelUrl": "@mkbhd",
+    "query": "iPhone review"
+  }
+}
+```
+
+### `get_video_comments`
+
+Retrieve comments from a YouTube video.
+
+**Parameters:**
+- `videoId` (required): YouTube video ID or full URL
+- `sortBy` (optional): Sort comments by "top" or "newest". Defaults to "top"
+- `maxComments` (optional): Maximum number of comments to retrieve. Defaults to 100
+
+**Examples:**
+
+Basic usage:
+```json
+{
+  "name": "get_video_comments",
+  "arguments": {
+    "videoId": "dQw4w9WgXcQ"
+  }
+}
+```
+
+With sorting and limit:
+```json
+{
+  "name": "get_video_comments",
+  "arguments": {
+    "videoId": "dQw4w9WgXcQ",
+    "sortBy": "newest",
+    "maxComments": 50
+  }
+}
+```
+
+## Response Formats
+
+### Transcript Response
+For `get_youtube_transcript`, the tool returns the raw transcript text. For large transcripts, the response includes pagination information:
 
 ```
 [Segment 1 of 3]
@@ -95,6 +182,50 @@ this is the actual transcript text content...
 ```
 
 When multiple segments are available, you can retrieve subsequent segments by incrementing the `segment` parameter.
+
+### Channel Videos Response
+For `get_channel_videos` and `search_channel_videos`, the response is a JSON object containing channel information and video details:
+
+```json
+{
+  "channel": {
+    "name": "Channel Name",
+    "subscribers": "1.23M subscribers",
+    "videoCount": "500 videos"
+  },
+  "videos": [
+    {
+      "id": "videoId123",
+      "title": "Video Title",
+      "url": "https://www.youtube.com/watch?v=videoId123",
+      "views": "1.2M views",
+      "uploadTime": "2 weeks ago",
+      "duration": "10:34"
+    }
+  ],
+  "totalVideosRetrieved": 50
+}
+```
+
+### Comments Response
+For `get_video_comments`, the response includes comment details:
+
+```json
+{
+  "videoId": "dQw4w9WgXcQ",
+  "sortBy": "top",
+  "comments": [
+    {
+      "author": "Username",
+      "text": "This is a comment",
+      "likes": "1.2K",
+      "replyCount": 23,
+      "timeAgo": "2 weeks ago"
+    }
+  ],
+  "totalComments": 100
+}
+```
 
 ## Caching
 
@@ -117,12 +248,22 @@ TRANSCRIPT_CACHE_TTL=600 npx mcp-headless-youtube-transcript
 
 ## Supported URL Formats
 
+### Video URLs
 - Video ID: `dQw4w9WgXcQ`
 - YouTube URLs:
   - `https://www.youtube.com/watch?v=dQw4w9WgXcQ`
   - `https://youtu.be/dQw4w9WgXcQ`
   - `https://www.youtube.com/embed/dQw4w9WgXcQ`
   - `https://www.youtube.com/v/dQw4w9WgXcQ`
+
+### Channel URLs
+- Handle: `@mkbhd`
+- Channel ID: `UCBJycsmduvYEL83R_U4JriQ`
+- Channel URLs:
+  - `https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ`
+  - `https://www.youtube.com/c/mkbhd`
+  - `https://www.youtube.com/user/marquesbrownlee`
+  - `https://www.youtube.com/@mkbhd`
 
 ## Development
 
