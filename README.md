@@ -246,6 +246,26 @@ The server includes built-in caching to improve performance for paginated reques
 TRANSCRIPT_CACHE_TTL=600 npx mcp-headless-youtube-transcript
 ```
 
+## Environment Variables
+
+### PUPPETEER_EXECUTABLE_PATH
+
+If you need to specify a custom path for the Chromium/Chrome executable used by Puppeteer, you can set the `PUPPETEER_EXECUTABLE_PATH` environment variable:
+
+```bash
+# Example: Using system Chrome
+PUPPETEER_EXECUTABLE_PATH="/usr/bin/google-chrome" npx mcp-headless-youtube-transcript
+
+# Example: Using a specific Chromium installation
+PUPPETEER_EXECUTABLE_PATH="/path/to/chromium" npx mcp-headless-youtube-transcript
+```
+
+This is useful when:
+- Running in containerized environments
+- Using a system-installed Chrome/Chromium instead of the bundled one
+- Working in environments with specific security requirements
+- Troubleshooting Puppeteer launch issues
+
 ## Supported URL Formats
 
 ### Video URLs
