@@ -65,4 +65,38 @@ export function truncateText(text, maxLength = 50000) {
     }
     return text.substring(0, maxLength) + '\n\n[Content truncated due to length...]';
 }
+// Validated selectors from discovery work
+export const SEARCH_SELECTORS = {
+    searchInput: 'input[name="search_query"]',
+    searchButton: 'button[aria-label="Search"]',
+    resultsContainer: '#contents',
+    videoResult: 'ytd-video-renderer',
+    channelResult: 'ytd-channel-renderer',
+    videoTitle: 'h3 a',
+    channelName: '#text a[href*="/channel/"], #text a[href*="/@"]',
+    thumbnail: 'img',
+    metadata: '#metadata-line'
+};
+// Helper function to parse search results from DOM
+export function parseSearchResults(resultsHtml) {
+    // This would typically use a DOM parser, but for the MCP server
+    // we'll implement the extraction logic using the validated selectors
+    // This is a placeholder for the actual DOM parsing implementation
+    return [];
+}
+// Helper function to validate search result URL
+export function isValidYouTubeUrl(url) {
+    const youtubePatterns = [
+        /^https:\/\/www\.youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11}/,
+        /^https:\/\/www\.youtube\.com\/channel\//,
+        /^https:\/\/www\.youtube\.com\/@/
+    ];
+    return youtubePatterns.some(pattern => pattern.test(url));
+}
+// Helper function to generate cache key for search results
+export function getSearchCacheKey(query, resultTypes, maxResults) {
+    const normalizedQuery = query.toLowerCase().trim();
+    const sortedTypes = [...resultTypes].sort();
+    return `search:${normalizedQuery}:${sortedTypes.join(',')}:${maxResults}`;
+}
 //# sourceMappingURL=utils.js.map

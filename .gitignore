@@ -55,3 +55,5 @@ temp/
 *.pid
 *.seed
 *.pid.lock
+
+.cache/

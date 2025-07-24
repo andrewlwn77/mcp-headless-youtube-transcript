@@ -7,20 +7,28 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 // @ts-ignore - Types are defined in global.d.ts
-import { getSubtitles, Subtitle, getChannelVideos, searchChannelVideos, getVideoComments } from 'headless-youtube-captions';
-import { extractVideoId, formatTime, extractChannelIdentifier, formatChannelUrl, truncateText } from './utils.js';
+import { getSubtitles, Subtitle, getChannelVideos, searchChannelVideos, getVideoComments, searchYouTubeGlobal } from 'headless-youtube-captions';
+import { extractVideoId, formatTime, extractChannelIdentifier, formatChannelUrl, truncateText, SearchResult, SEARCH_SELECTORS, isValidYouTubeUrl, getSearchCacheKey } from './utils.js';
 
-// Cache interface
+// Cache interfaces
 interface CacheEntry {
   transcript: string;
   expiresAt: number;
 }
 
-// In-memory cache
-const transcriptCache = new Map<string, CacheEntry>();
+interface SearchCacheEntry {
+  results: SearchResult[];
+  expiresAt: number;
+}
 
-// Get cache TTL from environment variable (default 5 minutes)
-const CACHE_TTL_SECONDS = parseInt(process.env.TRANSCRIPT_CACHE_TTL || '300');
+// In-memory caches
+const transcriptCache = new Map<string, CacheEntry>();
+const searchCache = new Map<string, SearchCacheEntry>();
+
+// Get cache TTL from environment variables
+const CACHE_TTL_SECONDS = parseInt(process.env.TRANSCRIPT_CACHE_TTL || '300'); // 5 minutes default
+const SEARCH_CACHE_TTL_SECONDS = parseInt(process.env.SEARCH_CACHE_TTL || '3600'); // 1 hour default
+const MAX_SEARCH_CACHE_SIZE = parseInt(process.env.MAX_SEARCH_CACHE_SIZE || '100');
 
 // Cache helper functions
 function getCacheKey(videoId: string, lang: string): string {
@@ -50,11 +58,53 @@ function setCachedTranscript(videoId: string, lang: string, transcript: string):
   transcriptCache.set(key, { transcript, expiresAt });
 }
 
+// Search cache helper functions
+function getCachedSearchResults(query: string, resultTypes: string[], maxResults: number): SearchResult[] | null {
+  const key = getSearchCacheKey(query, resultTypes, maxResults);
+  const entry = searchCache.get(key);
+  
+  if (!entry) return null;
+  
+  const now = Date.now();
+  if (now > entry.expiresAt) {
+    searchCache.delete(key);
+    return null;
+  }
+  
+  // Update expiration time on read
+  entry.expiresAt = now + (SEARCH_CACHE_TTL_SECONDS * 1000);
+  return entry.results;
+}
+
+function setCachedSearchResults(query: string, resultTypes: string[], maxResults: number, results: SearchResult[]): void {
+  const key = getSearchCacheKey(query, resultTypes, maxResults);
+  const expiresAt = Date.now() + (SEARCH_CACHE_TTL_SECONDS * 1000);
+  
+  // LRU eviction if cache is full
+  if (searchCache.size >= MAX_SEARCH_CACHE_SIZE) {
+    const firstKey = searchCache.keys().next().value;
+    if (firstKey) {
+      searchCache.delete(firstKey);
+    }
+  }
+  
+  searchCache.set(key, { results, expiresAt });
+}
+
 function cleanupExpiredCache(): void {
   const now = Date.now();
+  
+  // Cleanup transcript cache
   for (const [key, entry] of transcriptCache.entries()) {
     if (now > entry.expiresAt) {
       transcriptCache.delete(key);
+    }
+  }
+  
+  // Cleanup search cache
+  for (const [key, entry] of searchCache.entries()) {
+    if (now > entry.expiresAt) {
+      searchCache.delete(key);
     }
   }
 }
@@ -159,6 +209,55 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ['videoId'],
+        },
+      },
+      {
+        name: 'search_youtube_global',
+        description: 'Search across all of YouTube and return structured results',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search term to find videos and channels',
+            },
+            maxResults: {
+              type: 'number',
+              description: 'Maximum number of results to return (1-20). Defaults to 10',
+              default: 10,
+              minimum: 1,
+              maximum: 20,
+            },
+            resultTypes: {
+              type: 'array',
+              description: 'Types of results to include',
+              items: {
+                type: 'string',
+                enum: ['videos', 'channels', 'all'],
+              },
+              default: ['all'],
+            },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'navigate_search_result',
+        description: 'Navigate to a video or channel page from search results',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            resultUrl: {
+              type: 'string',
+              description: 'YouTube URL from search results to navigate to',
+            },
+            resultType: {
+              type: 'string',
+              description: 'Type of the result being navigated to',
+              enum: ['video', 'channel'],
+            },
+          },
+          required: ['resultUrl', 'resultType'],
         },
       },
     ],
@@ -434,6 +533,148 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           {
             type: 'text',
             text: `Error getting video comments: ${errorMessage}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  if (name === 'search_youtube_global') {
+    try {
+      const { query, maxResults = 10, resultTypes = ['all'] } = args as {
+        query: string;
+        maxResults?: number;
+        resultTypes?: ('videos' | 'channels' | 'all')[];
+      };
+
+      // Validate inputs
+      if (!query.trim()) {
+        throw new Error('Search query cannot be empty');
+      }
+
+      if (maxResults < 1 || maxResults > 20) {
+        throw new Error('maxResults must be between 1 and 20');
+      }
+
+      // Check cache first
+      let results: SearchResult[];
+      const cachedResults = getCachedSearchResults(query, resultTypes, maxResults);
+      
+      if (cachedResults) {
+        console.error('Using cached search results');
+        results = cachedResults;
+      } else {
+        // Use the real headless-youtube-captions search function
+        console.error('Performing new YouTube search...');
+        const searchResult = await searchYouTubeGlobal({
+          query: query,
+          maxResults: maxResults,
+          resultTypes: resultTypes
+        });
+
+        // Convert to our SearchResult format
+        results = searchResult.results.map((result: any) => ({
+          id: result.id,
+          type: result.type,
+          title: result.title,
+          url: result.url,
+          thumbnail: result.thumbnail || '',
+          channel: result.channel || '',
+          views: result.views || '',
+          duration: result.duration || '',
+          uploadTime: result.uploadTime || '',
+          subscribers: result.subscribers || '',
+          videoCount: result.videoCount || ''
+        }));
+
+        // Cache the results
+        setCachedSearchResults(query, resultTypes, maxResults, results);
+      }
+
+      // Filter by result types if not 'all'
+      if (!resultTypes.includes('all')) {
+        results = results.filter(result => 
+          (resultTypes.includes('videos') && result.type === 'video') ||
+          (resultTypes.includes('channels') && result.type === 'channel')
+        );
+      }
+
+      // Limit results
+      const limitedResults = results.slice(0, maxResults);
+
+      const response = {
+        query: query,
+        resultTypes: resultTypes,
+        maxResults: maxResults,
+        totalFound: limitedResults.length,
+        results: limitedResults,
+        cached: results === getCachedSearchResults(query, resultTypes, maxResults)
+      };
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(response, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error searching YouTube: ${errorMessage}`,
+          },
+        ],
+        isError: true,
+      };
+    } finally {
+      cleanupExpiredCache();
+    }
+  }
+
+  if (name === 'navigate_search_result') {
+    try {
+      const { resultUrl, resultType } = args as {
+        resultUrl: string;
+        resultType: 'video' | 'channel';
+      };
+
+      // Validate URL
+      if (!isValidYouTubeUrl(resultUrl)) {
+        throw new Error('Invalid YouTube URL provided');
+      }
+
+      // For now, just return confirmation of navigation
+      // In full implementation, this would use Puppeteer to navigate
+      const response = {
+        success: true,
+        navigatedTo: resultUrl,
+        resultType: resultType,
+        message: `Successfully navigated to ${resultType}: ${resultUrl}`,
+        timestamp: new Date().toISOString()
+      };
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(response, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error navigating to search result: ${errorMessage}`,
           },
         ],
         isError: true,

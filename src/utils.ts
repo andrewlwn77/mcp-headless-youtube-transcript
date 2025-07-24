@@ -78,3 +78,55 @@ export function truncateText(text: string, maxLength: number = 50000): string {
   
   return text.substring(0, maxLength) + '\n\n[Content truncated due to length...]';
 }
+
+// Search result types and interfaces
+export interface SearchResult {
+  id: string;
+  type: 'video' | 'channel';
+  title: string;
+  url: string;
+  thumbnail?: string;
+  channel?: string;
+  views?: string;
+  duration?: string;
+  uploadTime?: string;
+}
+
+// Validated selectors from discovery work
+export const SEARCH_SELECTORS = {
+  searchInput: 'input[name="search_query"]',
+  searchButton: 'button[aria-label="Search"]',
+  resultsContainer: '#contents',
+  videoResult: 'ytd-video-renderer',
+  channelResult: 'ytd-channel-renderer',
+  videoTitle: 'h3 a',
+  channelName: '#text a[href*="/channel/"], #text a[href*="/@"]',
+  thumbnail: 'img',
+  metadata: '#metadata-line'
+} as const;
+
+// Helper function to parse search results from DOM
+export function parseSearchResults(resultsHtml: string): SearchResult[] {
+  // This would typically use a DOM parser, but for the MCP server
+  // we'll implement the extraction logic using the validated selectors
+  // This is a placeholder for the actual DOM parsing implementation
+  return [];
+}
+
+// Helper function to validate search result URL
+export function isValidYouTubeUrl(url: string): boolean {
+  const youtubePatterns = [
+    /^https:\/\/www\.youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11}/,
+    /^https:\/\/www\.youtube\.com\/channel\//,
+    /^https:\/\/www\.youtube\.com\/@/
+  ];
+  
+  return youtubePatterns.some(pattern => pattern.test(url));
+}
+
+// Helper function to generate cache key for search results
+export function getSearchCacheKey(query: string, resultTypes: string[], maxResults: number): string {
+  const normalizedQuery = query.toLowerCase().trim();
+  const sortedTypes = [...resultTypes].sort();
+  return `search:${normalizedQuery}:${sortedTypes.join(',')}:${maxResults}`;
+}

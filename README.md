@@ -5,6 +5,7 @@ An MCP (Model Context Protocol) server that extracts YouTube video transcripts, 
 ## Features
 
 - Extract transcripts from YouTube videos using video ID or full URL
+- **Search across all of YouTube** for videos and channels globally
 - Get videos from YouTube channels with pagination support
 - Search for videos within a specific channel
 - Retrieve comments from YouTube videos
@@ -83,6 +84,51 @@ With pagination:
   "arguments": {
     "videoId": "dQw4w9WgXcQ",
     "segment": 2
+  }
+}
+```
+
+### `search_youtube_global`
+
+Search across all of YouTube for videos and channels with customizable filters.
+
+**Parameters:**
+- `query` (required): Search term to find videos and channels
+- `maxResults` (optional): Maximum number of results to return (1-20). Defaults to 10
+- `resultTypes` (optional): Array of result types to include. Options: ["videos"], ["channels"], or ["all"]. Defaults to ["all"]
+
+**Examples:**
+
+Basic search:
+```json
+{
+  "name": "search_youtube_global",
+  "arguments": {
+    "query": "javascript tutorial"
+  }
+}
+```
+
+Search only for videos:
+```json
+{
+  "name": "search_youtube_global",
+  "arguments": {
+    "query": "machine learning",
+    "maxResults": 15,
+    "resultTypes": ["videos"]
+  }
+}
+```
+
+Search only for channels:
+```json
+{
+  "name": "search_youtube_global",
+  "arguments": {
+    "query": "cooking channels",
+    "maxResults": 5,
+    "resultTypes": ["channels"]
   }
 }
 ```
@@ -183,6 +229,40 @@ this is the actual transcript text content...
 
 When multiple segments are available, you can retrieve subsequent segments by incrementing the `segment` parameter.
 
+### Global Search Response
+For `search_youtube_global`, the response includes search results with comprehensive metadata:
+
+```json
+{
+  "query": "javascript tutorial",
+  "resultTypes": ["all"],
+  "maxResults": 10,
+  "totalFound": 5,
+  "results": [
+    {
+      "id": "EerdGm-ehJQ",
+      "type": "video",
+      "title": "JavaScript Tutorial Full Course - Beginner to Pro",
+      "url": "https://www.youtube.com/watch?v=EerdGm-ehJQ",
+      "channel": "SuperSimpleDev",
+      "views": "5.8M views",
+      "uploadTime": "1 year ago",
+      "duration": "22:15:57",
+      "thumbnail": "https://i.ytimg.com/vi/EerdGm-ehJQ/hq720.jpg"
+    },
+    {
+      "id": "UCBJycsmduvYEL83R_U4JriQ",
+      "type": "channel",
+      "title": "Marques Brownlee",
+      "url": "https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ",
+      "subscribers": "18.3M subscribers",
+      "videoCount": "4,832 videos",
+      "thumbnail": "https://yt3.ggpht.com/..."
+    }
+  ]
+}
+```
+
 ### Channel Videos Response
 For `get_channel_videos` and `search_channel_videos`, the response is a JSON object containing channel information and video details:
 
@@ -229,15 +309,18 @@ For `get_video_comments`, the response includes comment details:
 
 ## Caching
 
-The server includes built-in caching to improve performance for paginated requests. The cache behavior can be configured with an environment variable:
+The server includes built-in caching to improve performance for repeated requests. The cache behavior can be configured with environment variables:
 
-- `TRANSCRIPT_CACHE_TTL`: Cache duration in seconds (default: 300 = 5 minutes)
+- `TRANSCRIPT_CACHE_TTL`: Cache duration for transcripts in seconds (default: 300 = 5 minutes)
+- Search results are cached separately with a 1-hour TTL for optimal performance
 
 ### Cache Features:
 - Full transcripts are cached on first fetch
+- Search results are cached with longer TTL (1 hour) due to their general nature
 - Cache expiration time is updated on each read or write
 - Expired entries are automatically cleaned up after each request
 - Each video+language combination is cached separately
+- Search queries are cached by query string and result type
 
 ### Setting Cache Duration:
 
