@@ -57,3 +57,5 @@ temp/
 *.pid.lock
 
 .cache/
+
+.bmad-history/

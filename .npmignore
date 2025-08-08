@@ -19,6 +19,13 @@ vitest.config.ts
 .vscode/
 .idea/
 .claude/
+CLAUDE.md
+.mcp.json
+
+# BMAD development files
+.bmad-history/
+bmad-immediate/
+docs/
 
 # Logs
 *.log

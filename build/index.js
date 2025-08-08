@@ -3,7 +3,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, } from '@modelcontextprotocol/sdk/types.js';
 // @ts-ignore - Types are defined in global.d.ts
-import { getSubtitles, getChannelVideos, searchChannelVideos, getVideoComments, searchYouTubeGlobal } from 'headless-youtube-captions';
+import { getSubtitles, getChannelVideos, searchChannelVideos, getVideoComments, searchYouTubeGlobal, getVideoMetadata } from 'headless-youtube-captions';
 import { extractVideoId, extractChannelIdentifier, formatChannelUrl, truncateText, isValidYouTubeUrl, getSearchCacheKey } from './utils.js';
 // In-memory caches
 const transcriptCache = new Map();
@@ -203,6 +203,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         },
                     },
                     required: ['query'],
+                },
+            },
+            {
+                name: 'get_video_metadata',
+                description: 'Extract comprehensive video metadata including description, upload date, like count',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        videoId: {
+                            type: 'string',
+                            description: 'YouTube video ID or full URL',
+                        },
+                        expandDescription: {
+                            type: 'boolean',
+                            description: 'Whether to expand truncated descriptions. Defaults to true',
+                            default: true,
+                        },
+                    },
+                    required: ['videoId'],
                 },
             },
             {
@@ -538,6 +557,65 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             };
         }
         finally {
+            cleanupExpiredCache();
+        }
+    }
+    if (name === 'get_video_metadata') {
+        try {
+            const { videoId, expandDescription = true } = args;
+            // Extract video ID from URL if needed
+            const extractedVideoId = extractVideoId(videoId);
+            if (!extractedVideoId) {
+                throw new Error('Invalid YouTube video ID or URL');
+            }
+            // Check cache first - reuse the same cache key pattern
+            let cachedMetadata = getCachedTranscript(extractedVideoId, `metadata_${expandDescription}`);
+            if (cachedMetadata) {
+                try {
+                    const parsedMetadata = JSON.parse(cachedMetadata);
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: JSON.stringify(parsedMetadata, null, 2),
+                            },
+                        ],
+                    };
+                }
+                catch (e) {
+                    // Invalid cached data, proceed with fresh extraction
+                }
+            }
+            // Get video metadata using headless-youtube-captions
+            const metadata = await getVideoMetadata({
+                videoID: extractedVideoId,
+                expandDescription: expandDescription,
+            });
+            // Cache the result (using the transcript cache infrastructure)
+            setCachedTranscript(extractedVideoId, `metadata_${expandDescription}`, JSON.stringify(metadata));
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify(metadata, null, 2),
+                    },
+                ],
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: `Error getting video metadata: ${errorMessage}`,
+                    },
+                ],
+                isError: true,
+            };
+        }
+        finally {
+            // Cleanup expired cache entries after each request
             cleanupExpiredCache();
         }
     }
